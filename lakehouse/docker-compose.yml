@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  airflow-init:
+    image: apache/airflow:2.9.1-python3.10
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres-airflow:5432/${AIRFLOW_DB_NAME}
+      - _AIRFLOW_DB_MIGRATE=true
+      - _AIRFLOW_WWW_USER_CREATE=true
+      - _AIRFLOW_WWW_USER_USERNAME=${AIRFLOW_DB_USER}
+      - _AIRFLOW_WWW_USER_PASSWORD=${AIRFLOW_DB_PASSWORD}
+    user: "0:0"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    entrypoint: /bin/bash
+    command: -c "airflow db init && airflow users create --username airflow --password airflow --firstname Airflow --lastname Admin --role Admin --email admin@example.com"
+
+  airflow-webserver:
+    image: apache/airflow:2.9.1-python3.10
+    restart: always
+    depends_on:
+      - airflow-scheduler
+      - postgres-airflow
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres-airflow:5432/${AIRFLOW_DB_NAME}
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    ports:
+      - "8080:8080"
+    command: webserver
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.1-python3.10
+    restart: always
+    depends_on:
+      - postgres-airflow
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres-airflow:5432/${AIRFLOW_DB_NAME}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    command: scheduler
+
+  airflow-cli:
+    image: apache/airflow:2.9.1-python3.10
+    profiles:
+      - debug
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres-airflow:5432/${AIRFLOW_DB_NAME}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    entrypoint: bash
+    command: -c "airflow"
+    depends_on:
+      - postgres-airflow
+
+  postgres-airflow:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      POSTGRES_DB: ${AIRFLOW_DB_NAME}
+    volumes:
+      - postgres-airflow-data:/var/lib/postgresql/data
+
+  postgres-oltp:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: ${OLTP_DB_USER}
+      POSTGRES_PASSWORD: ${OLTP_DB_PASSWORD}
+      POSTGRES_DB: ${OLTP_DB_NAME}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-oltp-data:/var/lib/postgresql/data
+      - ./postgres/log:/var/log/postgresql
+      - ./postgres/conf/postgresql.conf:/etc/postgresql/postgresql.conf
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+
+  minio:
+    image: minio/minio:latest
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./minio/data:/data  # 👈 This path is now inside your project folder
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+
+  trino:
+    image: trinodb/trino:latest
+    restart: always
+    environment:
+      - JAVA_TOOL_OPTIONS=-Djava.util.logging.config.file=/etc/trino/logging.properties
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./trino/etc:/etc/trino
+      - ./trino/logs:/var/log/trino   # 👈 mount logs to host
+
+volumes:
+  postgres-airflow-data:
+  postgres-oltp-data:

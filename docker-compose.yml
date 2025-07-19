@@ -1,0 +1,82 @@
+version: "3.9"
+
+services:
+  # PostgreSQL for user data and watchlists (OLTP)
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      - backend
+
+  # ClickHouse for storing crypto metrics (OLAP)
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    restart: unless-stopped
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native TCP interface
+    networks:
+      - backend
+
+  # Redis for caching frequently accessed queries
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+
+  # Data collector service
+  collector:
+    build: ./collector
+    volumes:
+      - ./collector:/app
+    environment:
+      POSTGRES_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CLICKHOUSE_HOST: clickhouse
+      REDIS_HOST: redis
+    depends_on:
+      - postgres
+      - clickhouse
+      - redis
+    networks:
+      - backend
+
+  # Web application service
+  frontend:
+    build: ./frontend
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    environment:
+      POSTGRES_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CLICKHOUSE_HOST: clickhouse
+      REDIS_HOST: redis
+    depends_on:
+      - postgres
+      - clickhouse
+      - redis
+    networks:
+      - backend
+
+volumes:
+  pg_data:
+  clickhouse_data:
+  redis_data:
+
+networks:
+  backend:
