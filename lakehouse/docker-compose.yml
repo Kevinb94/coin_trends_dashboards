@@ -19,7 +19,9 @@ services:
     command: -c "airflow db init && airflow users create --username airflow --password airflow --firstname Airflow --lastname Admin --role Admin --email admin@example.com"
 
   airflow-webserver:
-    image: apache/airflow:2.9.1-python3.10
+    build:
+      context: ./airflow
+    image: custom-airflow:2.9.1
     restart: always
     depends_on:
       - airflow-scheduler
@@ -38,7 +40,9 @@ services:
     command: webserver
 
   airflow-scheduler:
-    image: apache/airflow:2.9.1-python3.10
+    build:
+      context: ./airflow
+    image: custom-airflow:2.9.1
     restart: always
     depends_on:
       - postgres-airflow
@@ -52,7 +56,9 @@ services:
     command: scheduler
 
   airflow-cli:
-    image: apache/airflow:2.9.1-python3.10
+    build:
+      context: ./airflow
+    image: custom-airflow:2.9.1
     profiles:
       - debug
     environment:
@@ -62,8 +68,7 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
-    entrypoint: bash
-    command: -c "airflow"
+    entrypoint: ""
     depends_on:
       - postgres-airflow
 

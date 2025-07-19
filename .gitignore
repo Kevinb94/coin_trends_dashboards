@@ -1,1 +1,6 @@
 lakehouse/minio/data/.minio.sys/*
+lakehouse/airflow/logs/*
+lakehouse/airflow/logs/*
+lakehouse/postgres/log/*
+lakehouse/trino/logs/*
+lakehouse/postgres/log/postgresql.log
